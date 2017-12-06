@@ -3,44 +3,37 @@ package stm
 import "testing"
 
 const (
-	minVersion       = 0
-	midVersion       = 1 << 30
-	maxVersion       = 1<<63 - 1
-	minStateUnlocked = minVersion
-	midStateUnlocked = midVersion
-	maxStateUnlocked = maxVersion
-	minStateLocked   = 1<<63 | minVersion
-	midStateLocked   = 1<<63 | midVersion
-	maxStateLocked   = 1<<63 | maxVersion
+	minVersion = 0
+	midVersion = 1 << 30
+	maxVersion = 1<<63 - 1
 )
 
 func TestEncode(t *testing.T) {
 	cases := []struct {
 		inputLocked  bool
 		inputVersion uint64
-		outputState  uint64
+		output       uint64
 	}{
-		{false, minVersion, minStateUnlocked},
-		{false, midVersion, midStateUnlocked},
-		{false, maxVersion, maxStateUnlocked},
-		{true, minVersion, minStateLocked},
-		{true, midVersion, midStateLocked},
-		{true, maxVersion, maxStateLocked},
+		{false, minVersion, minVersion},
+		{false, midVersion, midVersion},
+		{false, maxVersion, maxVersion},
+		{true, minVersion, 1<<63 | minVersion},
+		{true, midVersion, 1<<63 | midVersion},
+		{true, maxVersion, 1<<63 | maxVersion},
 	}
 
 	for _, tc := range cases {
 		encoded := encode(tc.inputLocked, tc.inputVersion)
-		if encoded != tc.outputState {
-			t.Errorf("got: %v want: %v", encoded, tc.outputState)
+		if encoded != tc.output {
+			t.Errorf("got: %v want: %v", encoded, tc.output)
 		}
 	}
 }
 
 func TestDecode(t *testing.T) {
 	cases := []struct {
-		inputLocked  bool
-		inputVersion uint64
-		// An output pairs should be identical to an input pairs.
+		locked  bool
+		version uint64
 	}{
 		{false, minVersion},
 		{false, midVersion},
@@ -51,127 +44,149 @@ func TestDecode(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		encoded := encode(tc.inputLocked, tc.inputVersion)
+		encoded := encode(tc.locked, tc.version)
 		locked, version := decode(encoded)
-		if locked != tc.inputLocked || version != tc.inputVersion {
+		if locked != tc.locked || version != tc.version {
 			t.Errorf("got: (%v, %v) want: (%v, %v)",
-				locked, version, tc.inputLocked, tc.inputVersion)
+				locked, version, tc.locked, tc.version)
 		}
 	}
 }
 
+func helperEncode(locked bool, version uint64) (lock *versionedLock) {
+	new := (versionedLock)(encode(locked, version))
+	return &new
+}
+
+func helperDecode(lock *versionedLock) (locked bool, version uint64) {
+	return decode((uint64)(*lock))
+}
+
 func TestTryLock(t *testing.T) {
 	cases := []struct {
-		inputState  uint64
-		outputState uint64
-		outputOK    bool
+		locked  bool
+		version uint64
 	}{
-		{minStateUnlocked, minStateLocked, true},
-		{midStateUnlocked, midStateLocked, true},
-		{maxStateUnlocked, maxStateLocked, true},
-		{minStateLocked, minStateLocked, false},
-		{midStateLocked, midStateLocked, false},
-		{maxStateLocked, maxStateLocked, false},
+		{false, minVersion},
+		{false, midVersion},
+		{false, maxVersion},
+		{true, minVersion},
+		{true, midVersion},
+		{true, maxVersion},
 	}
 
-	for i, tc := range cases {
-		lock := (*versionedLock)(&tc.inputState)
+	for _, tc := range cases {
+		lock := helperEncode(tc.locked, tc.version)
 
 		ok := lock.tryLock()
-		if ok != tc.outputOK {
-			t.Errorf("got: ok = %v, want: ok = %v", ok, tc.outputOK)
+		if ok == tc.locked {
+			t.Errorf("got: ok = %v, want: ok = %v", ok, !ok)
 		}
 
-		lockState := *(*uint64)(lock)
-		if lockState != tc.outputState {
-			t.Errorf("%v: got: state = %v want: state = %v",
-				i, lockState, tc.outputState)
+		locked, version := helperDecode(lock)
+		if locked != true || version != tc.version {
+			t.Errorf("got: state = (%v, %v) want: state = (%v, %v)",
+				locked, version, true, tc.version)
 		}
 	}
 }
 
 func TestUnlock(t *testing.T) {
 	cases := []struct {
-		inputState  uint64
-		outputState uint64
+		locked  bool
+		version uint64
 	}{
-		{minStateLocked, minStateUnlocked},
-		{midStateLocked, midStateUnlocked},
-		{maxStateLocked, maxStateUnlocked},
+		{true, minVersion},
+		{true, midVersion},
+		{true, maxVersion},
 	}
 
 	for _, tc := range cases {
-		lock := (*versionedLock)(&tc.inputState)
+		lock := helperEncode(tc.locked, tc.version)
 		lock.unlock()
-		lockState := *(*uint64)(lock)
-		if lockState != tc.outputState {
-			t.Errorf("got: %v want: %v", lockState, tc.outputState)
+
+		locked, version := helperDecode(lock)
+		if locked != false || version != tc.version {
+			t.Errorf("got: (%v, %v) want: (%v, %v)",
+				locked, version, false, tc.version)
 		}
 	}
 }
 
 func TestUnlockAndUpdate(t *testing.T) {
 	cases := []struct {
-		inputState   uint64
-		inputVersion uint64
-		// An output should be equal to an inputVersion.
+		locked  bool
+		version uint64
+		input   uint64
 	}{
-		{minStateLocked, midVersion},
-		{minStateLocked, maxVersion},
-		{midStateLocked, minVersion},
-		{midStateLocked, maxVersion},
+		{true, minVersion, midVersion},
+		{true, midVersion, maxVersion},
 	}
 
 	for _, tc := range cases {
-		lock := (*versionedLock)(&tc.inputState)
-		lock.unlockAndUpdate(tc.inputVersion)
-		lockState := *(*uint64)(lock)
-		if lockState != tc.inputState {
-			t.Errorf("got: %v want: %v", lockState, tc.inputState)
+		lock := helperEncode(tc.locked, tc.version)
+		lock.unlockAndUpdate(tc.input)
+
+		locked, version := helperDecode(lock)
+		if locked != false || version != tc.input {
+			t.Errorf("got: (%v, %v) want: (%v, %v)",
+				locked, version, false, tc.input)
 		}
 	}
 }
 
 func TestSampleLock(t *testing.T) {
 	cases := []struct {
-		inputState    uint64
-		outputLocked  bool
-		outputVersion uint64
+		locked  bool
+		version uint64
 	}{
-		{minStateUnlocked, false, minVersion},
-		{midStateUnlocked, false, midVersion},
-		{maxStateUnlocked, false, maxVersion},
-		{minStateLocked, true, minVersion},
-		{midStateLocked, true, midVersion},
-		{maxStateLocked, true, maxVersion},
+		{false, minVersion},
+		{false, midVersion},
+		{false, maxVersion},
+		{true, minVersion},
+		{true, midVersion},
+		{true, maxVersion},
 	}
 
 	for _, tc := range cases {
-		lock := (*versionedLock)(&tc.inputState)
+		lock := helperEncode(tc.locked, tc.version)
+
 		locked, version := lock.sampleLock()
-		if locked != tc.outputLocked || version != tc.outputVersion {
+		if locked != tc.locked || version != tc.version {
 			t.Errorf("got: (%v, %v), want: (%v, %v)",
-				locked, version, tc.outputLocked, tc.outputVersion)
+				locked, version, tc.locked, tc.version)
 		}
 	}
 }
 
 func TestMisuseEncode(t *testing.T) {
-	defer func() {
-		if err := recover(); err == nil {
-			t.Errorf("Too large version number does not panic.")
-		}
-	}()
-	encode(false, 1<<63)
+	cases := []struct {
+		locked  bool
+		version uint64
+	}{
+		{false, 1 << 63},
+		{true, 1 << 63},
+	}
+
+	for _, tc := range cases {
+		defer func() {
+			if err := recover(); err == nil {
+				t.Errorf("Too large version number does not panic.")
+			}
+		}()
+
+		encode(tc.locked, tc.version)
+	}
 }
 
 func TestMisuseUnlock(t *testing.T) {
 	cases := []struct {
-		inputState uint64
+		locked  bool
+		version uint64
 	}{
-		{minStateUnlocked},
-		{midStateUnlocked},
-		{maxStateUnlocked},
+		{false, minVersion},
+		{false, midVersion},
+		{false, maxVersion},
 	}
 
 	for _, tc := range cases {
@@ -181,18 +196,19 @@ func TestMisuseUnlock(t *testing.T) {
 			}
 		}()
 
-		lock := (*versionedLock)(&tc.inputState)
+		lock := helperEncode(tc.locked, tc.version)
 		lock.unlock()
 	}
 }
 
 func TestMisuseUnlockAndUpdate(t *testing.T) {
 	cases := []struct {
-		inputState   uint64
-		inputVersion uint64
+		locked  bool
+		version uint64
+		input   uint64
 	}{
-		{minStateUnlocked, midVersion},
-		{midStateUnlocked, maxVersion},
+		{false, minVersion, midVersion},
+		{false, midVersion, maxVersion},
 	}
 
 	for _, tc := range cases {
@@ -202,7 +218,7 @@ func TestMisuseUnlockAndUpdate(t *testing.T) {
 			}
 		}()
 
-		lock := (*versionedLock)(&tc.inputState)
-		lock.unlockAndUpdate(tc.inputVersion)
+		lock := helperEncode(tc.locked, tc.version)
+		lock.unlockAndUpdate(tc.input)
 	}
 }
