@@ -1,6 +1,6 @@
 // Package stm is a software transactional memory implementation for Go, which
-// is based on the Transactional Locking II (TL2) algorithm, proposed by Dice
-// et al. https://doi.org/10.1007/11864219_14
+// is based on the Transactional Locking II (TL2) proposed by Dice et al.
+// https://doi.org/10.1007/11864219_14
 package stm
 
 import "sync/atomic"
@@ -69,17 +69,15 @@ RETRY:
 
 	rec := &TRec{readVersion: globalClock.sampleClock()}
 
-	tx(rec) // speculative execution.
+	tx(rec) // speculative execution
 	if rec.aborted {
 		goto RETRY
 	}
 
-	// Return if tx is a read-only transaction.
 	if len(rec.writeSet) == 0 {
-		return
+		return // A fast path for read-only transaction
 	}
 
-	// Lock the elements of the write-set.
 	lockedSet := make(map[*TVar]struct{})
 	for x := range rec.writeSet {
 		if !x.lock.tryLock() {
@@ -97,8 +95,8 @@ RETRY:
 	if rec.writeVersion != rec.readVersion+1 {
 		for _, x := range rec.readSet {
 			locked, version := x.lock.sampleLock()
-			_, ok := lockedSet[x]
-			if (!ok && locked) || version > rec.readVersion {
+			_, lockedByMe := lockedSet[x]
+			if (!lockedByMe && locked) || version > rec.readVersion {
 				for y := range lockedSet {
 					y.lock.unlock()
 				}
