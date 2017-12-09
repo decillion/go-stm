@@ -45,10 +45,10 @@ func (rec *TRec) Load(x *TVar) (v interface{}) {
 		return v // No validation
 	}
 	rec.readSet = append(rec.readSet, x)
-	_, preVersion := x.lock.sampleLock()
+	_, pre := x.lock.sampleLock()
 	v = x.value.Load()
-	locked, postVersion := x.lock.sampleLock()
-	if locked || preVersion != postVersion || postVersion > rec.readVersion {
+	locked, post := x.lock.sampleLock()
+	if locked || pre != post || post > rec.readVersion {
 		rec.aborted = true
 	}
 	return v
@@ -56,6 +56,9 @@ func (rec *TRec) Load(x *TVar) (v interface{}) {
 
 // Store sets the value of the transactional variable x to the given value v.
 func (rec *TRec) Store(x *TVar, v interface{}) {
+	if rec.writeSet == nil {
+		rec.writeSet = make(map[*TVar]interface{})
+	}
 	rec.writeSet[x] = v
 }
 
@@ -64,10 +67,7 @@ func (rec *TRec) Store(x *TVar, v interface{}) {
 func Atomically(tx func(rec *TRec)) {
 RETRY:
 
-	rec := &TRec{
-		writeSet: make(map[*TVar]interface{}),
-	}
-	rec.readVersion = globalClock.sampleClock()
+	rec := &TRec{readVersion: globalClock.sampleClock()}
 
 	tx(rec) // speculative execution.
 	if rec.aborted {
