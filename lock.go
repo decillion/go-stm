@@ -26,6 +26,10 @@ func decode(encoded uint64) (locked bool, version uint64) {
 	return
 }
 
+func (lock *versionedLock) sampleLock() (locked bool, version uint64) {
+	return decode(atomic.LoadUint64((*uint64)(lock)))
+}
+
 func (lock *versionedLock) tryLock() (ok bool) {
 	old := atomic.LoadUint64((*uint64)(lock))
 	locked, version := decode(old)
@@ -37,8 +41,7 @@ func (lock *versionedLock) tryLock() (ok bool) {
 }
 
 func (lock *versionedLock) unlock() {
-	old := atomic.LoadUint64((*uint64)(lock))
-	locked, version := decode(old)
+	locked, version := lock.sampleLock()
 	if !locked {
 		panic("stm: unlock of unlocked versioned-lock.")
 	}
@@ -47,15 +50,10 @@ func (lock *versionedLock) unlock() {
 }
 
 func (lock *versionedLock) unlockAndUpdate(version uint64) {
-	old := atomic.LoadUint64((*uint64)(lock))
-	locked, _ := decode(old)
+	locked, _ := lock.sampleLock()
 	if !locked {
 		panic("stm: unlock of unlocked versioned-lock.")
 	}
 	new := encode(false, version)
 	atomic.StoreUint64((*uint64)(lock), new)
-}
-
-func (lock *versionedLock) sampleLock() (locked bool, version uint64) {
-	return decode(atomic.LoadUint64((*uint64)(lock)))
 }
