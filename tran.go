@@ -64,18 +64,18 @@ func (rec *TRec) Store(x *TVar, v interface{}) {
 
 // Atomically executes the given transaction tx atomically. The transaction tx
 // should not contain non-transactional shared-variables.
-func Atomically(tx func(rec *TRec)) {
+func Atomically(tx func(rec *TRec) interface{}) interface{} {
 RETRY:
 
 	rec := &TRec{readVersion: globalClock.sampleClock()}
 
-	tx(rec) // speculative execution
+	v := tx(rec) // speculative execution
 	if rec.aborted {
 		goto RETRY
 	}
 
 	if len(rec.writeSet) == 0 {
-		return // A fast path for read-only transaction
+		return v // A fast path for read-only transaction
 	}
 
 	lockedSet := make(map[*TVar]struct{})
@@ -109,4 +109,5 @@ RETRY:
 		x.value.Store(val)
 		x.lock.unlockAndUpdate(rec.writeVersion)
 	}
+	return v
 }

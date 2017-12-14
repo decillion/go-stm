@@ -27,9 +27,10 @@ func Benchmark_Read100_decillion(b *testing.B) {
 	x := de.New(0)
 	y := de.New(0)
 
-	load := func(rec *de.TRec) {
+	load := func(rec *de.TRec) interface{} {
 		rec.Load(x)
 		rec.Load(y)
+		return nil
 	}
 	b.ResetTimer()
 
@@ -85,13 +86,15 @@ func Benchmark_Read90Write10_decillion(b *testing.B) {
 	x := de.New(0)
 	y := de.New(0)
 
-	inc := func(rec *de.TRec) {
+	inc := func(rec *de.TRec) interface{} {
 		rec.Store(x, rec.Load(x).(int)+1)
 		rec.Store(y, rec.Load(y).(int)+1)
+		return nil
 	}
-	load := func(rec *de.TRec) {
+	load := func(rec *de.TRec) interface{} {
 		rec.Load(x)
 		rec.Load(y)
+		return nil
 	}
 	b.ResetTimer()
 
