@@ -66,7 +66,9 @@ func (rec *TRec) Store(x *TVar, v interface{}) {
 }
 
 // Atomically executes the given transaction tx atomically. The transaction tx
-// should not contain non-transactional shared-variables.
+// should not contain operations with side effects apart from Store and operations
+// to variables declared in tx. The return value of Atomically is the very value
+// returned by tx.
 func Atomically(tx func(rec *TRec) interface{}) interface{} {
 RETRY:
 
