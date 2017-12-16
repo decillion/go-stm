@@ -35,7 +35,7 @@ type TRec struct {
 	aborted      bool
 	readVersion  uint64
 	writeVersion uint64
-	readSet      []*TVar
+	readSet      map[*TVar]struct{}
 	writeSet     map[*TVar]interface{}
 }
 
@@ -44,7 +44,10 @@ func (rec *TRec) Load(x *TVar) (v interface{}) {
 	if v, ok := rec.writeSet[x]; ok {
 		return v // No validation
 	}
-	rec.readSet = append(rec.readSet, x)
+	if rec.readSet == nil {
+		rec.readSet = make(map[*TVar]struct{})
+	}
+	rec.readSet[x] = struct{}{}
 	_, pre := x.lock.sampleLock()
 	v = x.value.Load()
 	locked, post := x.lock.sampleLock()
@@ -67,7 +70,9 @@ func (rec *TRec) Store(x *TVar, v interface{}) {
 func Atomically(tx func(rec *TRec) interface{}) interface{} {
 RETRY:
 
-	rec := &TRec{readVersion: globalClock.sampleClock()}
+	rec := &TRec{
+		readVersion: globalClock.sampleClock(),
+	}
 
 	v := tx(rec) // speculative execution
 	if rec.aborted {
@@ -93,7 +98,7 @@ RETRY:
 
 	// Validate the elements of the read-set.
 	if rec.writeVersion != rec.readVersion+1 {
-		for _, x := range rec.readSet {
+		for x := range rec.readSet {
 			locked, version := x.lock.sampleLock()
 			_, lockedByMe := lockedSet[x]
 			if (!lockedByMe && locked) || version > rec.readVersion {
