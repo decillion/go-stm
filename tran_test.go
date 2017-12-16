@@ -1,42 +1,34 @@
 package stm
 
-import (
-	"fmt"
-	"sync"
-)
+import "fmt"
 
 func Example() {
-	x := New(0)
-	y := New(0)
-	wg := sync.WaitGroup{}
+	// There are two bank accounts of Alice and Bob.
+	accountA := New(100)
+	accountB := New(0)
 
-	// Atomically increment x and y.
-	inc := func(rec *TRec) interface{} {
-		currX := rec.Load(x).(int)
-		currY := rec.Load(y).(int)
-		rec.Store(x, currX+1)
-		rec.Store(y, currY+1)
+	// Transfer 20 from Alice's account to Bob's one.
+	transfer := func(rec *TRec) interface{} {
+		currA := rec.Load(accountA).(int)
+		currB := rec.Load(accountB).(int)
+		rec.Store(accountA, currA-20)
+		rec.Store(accountB, currB+20)
 		return nil
 	}
-	for i := 0; i < 100; i++ {
-		wg.Add(1)
-		go func() {
-			Atomically(inc)
-			wg.Done()
-		}()
-	}
-	wg.Wait()
+	Atomically(transfer)
 
-	// Read values of x and y atomically.
-	load := func(rec *TRec) interface{} {
-		var curr [2]int
-		curr[0] = rec.Load(x).(int)
-		curr[1] = rec.Load(y).(int)
-		return curr
+	// Check the balance of accounts of Alice and Bob.
+	inquiries := func(rec *TRec) interface{} {
+		balance := make(map[*TVar]int)
+		balance[accountA] = rec.Load(accountA).(int)
+		balance[accountB] = rec.Load(accountB).(int)
+		return balance
 	}
-	curr := Atomically(load).([2]int)
+	balance := Atomically(inquiries).(map[*TVar]int)
 
-	fmt.Printf("x = %v, y = %v", curr[0], curr[1])
+	fmt.Printf("The account of Alice holds %v.\nThe account of Bob holds %v.",
+		balance[accountA], balance[accountB])
 	// Output:
-	// x = 100, y = 100
+	// The account of Alice holds 80.
+	// The account of Bob holds 20.
 }
