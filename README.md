@@ -8,7 +8,8 @@ https://doi.org/10.1007/11864219_14
 
 ## Documents
 
-Please see the [godoc page](https://godoc.org/github.com/decillion/go-stm) for further information.
+See the [godoc page](https://godoc.org/github.com/decillion/go-stm) for further information.
+Here is a [blog post](https://qiita.com/decillion/items/d5da905e28b54dc769cd) about go-stm (in Japanese).
 
 ## Example 
 
