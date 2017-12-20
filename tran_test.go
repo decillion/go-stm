@@ -1,6 +1,10 @@
 package stm
 
-import "fmt"
+import (
+	"fmt"
+	"sync"
+	"testing"
+)
 
 func Example() {
 	// There are two bank accounts of Alice and Bob.
@@ -31,4 +35,49 @@ func Example() {
 	// Output:
 	// The account of Alice holds 80.
 	// The account of Bob holds 20.
+}
+
+func TestIncrement(t *testing.T) {
+	iter := 10000
+
+	x := New(0)
+	y := New(0)
+
+	inc := func(rec *TRec) interface{} {
+		rec.Store(x, rec.Load(x).(int)+1)
+		rec.Store(y, rec.Load(y).(int)+1)
+		return nil
+	}
+
+	read := func(rec *TRec) interface{} {
+		var curr [2]int
+		curr[0] = rec.Load(x).(int)
+		curr[1] = rec.Load(y).(int)
+		return curr
+	}
+
+	wg := sync.WaitGroup{}
+
+	for i := 0; i < 2*iter; i++ {
+		wg.Add(1)
+		j := i
+		go func() {
+			if j%2 == 0 {
+				Atomically(inc)
+			} else {
+				Atomically(read)
+			}
+			wg.Done()
+		}()
+	}
+
+	wg.Wait()
+
+	curr := Atomically(read).([2]int)
+	currX, currY := curr[0], curr[1]
+
+	if currX != iter || currY != iter {
+		t.Errorf("want: (x, y) = (%v, %v) got: (x, y) = (%v, %v)",
+			iter, iter, currX, currY)
+	}
 }
