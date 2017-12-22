@@ -42,3 +42,22 @@ fmt.Printf("The account of Alice holds %v.\nThe account of Bob holds %v.",
 // The account of Alice holds 80.
 // The account of Bob holds 20.
 ```
+
+## Benchmark
+
+There exists an another [STM package](https://github.com/lukechampine/stm) written by lukechampine.
+The lukechampine's package provides a richer interface but is less efficient than the present package.
+Here is the result of a very simple benchmark, in which two transactional variables are atomically incremented or read.
+The benchmark is taken at a DigitalOcean's High CPU Droplet with 32 cores.
+
+    Benchmark_Read90Write10_decillion-2      	10000000	       230 ns/op
+    Benchmark_Read90Write10_decillion-4      	10000000	       156 ns/op
+    Benchmark_Read90Write10_decillion-8      	10000000	       144 ns/op
+    Benchmark_Read90Write10_decillion-16       	10000000	       214 ns/op
+    Benchmark_Read90Write10_decillion-32       	 5000000	       289 ns/op
+
+    Benchmark_Read90Write10_lukechampine-2   	 2000000	       715 ns/op
+    Benchmark_Read90Write10_lukechampine-4   	 2000000	       761 ns/op
+    Benchmark_Read90Write10_lukechampine-8   	 2000000	       822 ns/op
+    Benchmark_Read90Write10_lukechampine-16    	 2000000	       912 ns/op
+    Benchmark_Read90Write10_lukechampine-32    	 2000000	       966 ns/op
